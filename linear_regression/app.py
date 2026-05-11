@@ -27,6 +27,8 @@ APP_DIR = Path(__file__).parent
 MODEL_PATH = APP_DIR / "model.pkl"
 DATA_PATH = APP_DIR / "data" / "cars_train.csv"
 
+INR_TO_RUB = 0.78
+
 
 st.set_page_config(
     page_title="Cars Price Predictor",
@@ -379,10 +381,14 @@ elif section == "Предсказание цены":
             )
             try:
                 pred = predict_df(row, artifact)[0]
-                st.success(f"Прогноз цены: **{pred:,.0f}** ₹")
+                pred_rub = pred * INR_TO_RUB
+                c1, c2 = st.columns(2)
+                c1.success(f"Прогноз цены: **{pred:,.0f}** ₹")
+                c2.success(f"≈ **{pred_rub:,.0f}** ₽")
                 st.caption(
-                    "Это значение получено через `expm1` обратного преобразования "
-                    "log-таргета."
+                    f"Конвертация по курсу 1 ₹ = {INR_TO_RUB} ₽. "
+                    "Базовое значение получено через `expm1` обратного "
+                    "преобразования log-таргета."
                 )
             except Exception as e:
                 st.error(f"Ошибка при предсказании: {e}")
@@ -399,8 +405,11 @@ elif section == "Предсказание цены":
                 st.dataframe(df_in.head(), use_container_width=True)
                 preds = predict_df(df_in, artifact)
                 result = df_in.copy()
-                result["predicted_selling_price"] = np.round(preds).astype(int)
-                st.markdown("**Результаты**")
+                result["predicted_selling_price_inr"] = np.round(preds).astype(int)
+                result["predicted_selling_price_rub"] = np.round(
+                    preds * INR_TO_RUB
+                ).astype(int)
+                st.markdown(f"**Результаты** (курс 1 ₹ = {INR_TO_RUB} ₽)")
                 st.dataframe(result, use_container_width=True)
                 buf = io.StringIO()
                 result.to_csv(buf, index=False)
@@ -452,12 +461,20 @@ else:
     st.plotly_chart(fig, use_container_width=True)
 
     st.markdown("### Все коэффициенты")
+    max_abs = float(df_coefs["abs_coef"].max())
     st.dataframe(
-        df_coefs.reset_index(drop=True).style.background_gradient(
-            cmap="RdBu_r", subset=["coef"]
-        ),
+        df_coefs.reset_index(drop=True),
         use_container_width=True,
         height=500,
+        column_config={
+            "coef": st.column_config.ProgressColumn(
+                "coef",
+                format="%.4f",
+                min_value=-max_abs,
+                max_value=max_abs,
+            ),
+            "abs_coef": st.column_config.NumberColumn(format="%.4f"),
+        },
     )
 
     pos = df_coefs[df_coefs["coef"] > 0].head(5)
